@@ -6,14 +6,14 @@
 --// • Silent Lock на Q, Auto Shoot на J, Combo на N
 
 getgenv().ResolveKey = "C"
-getgenv().CamlockKey = "F"
+getgenv().CamlockKey = "Q"
 getgenv().SilentKey = "V"
 getgenv().AutoAirKey = "B"
 getgenv().TriggerKey = "T"
 getgenv().GuiKey = "M"
 getgenv().LegitSmoothKey = "L"
 getgenv().BlatantKey = "K"
-getgenv().SilentLockKey = "Q"
+getgenv().SilentLockKey = "F"
 getgenv().AutoShootKey = "J"
 getgenv().ComboKey = "N"
 
@@ -37,7 +37,7 @@ getgenv().AirExtraBoostBase = 0.048
 getgenv().AirVelFactor = 0.00285
 getgenv().VelSmooth = 0.78
 getgenv().airTriggerDelay = 0.15
-getgenv().airFireRate = 0.012
+getgenv().airFireRate = 0.05
 getgenv().TriggerFireRate = 0.032
 getgenv().useHoldMode = false
 
