@@ -26,14 +26,14 @@ getgenv().LegitSmoothing = 0.018
 getgenv().BlatantSmoothing = 0.070
 
 -- Режим нулевого предсказания (для Da Hood / копий без системы прицеливания)
-getgenv().ZeroPredictionMode = true       -- true: отключает избыточный предикшн, оставляет только пинг+базу
-getgenv().BasePred = 0.163
+getgenv().ZeroPredictionMode = false       -- true: отключает избыточный предикшн, оставляет только пинг+базу
+getgenv().BasePred = 0.13021749999999999
 getgenv().PredPingFactor = 0.00029
 getgenv().PredDistFactor = 0.000052
 getgenv().PredVelFactor = 0.0145
 getgenv().PredAccelFactor = 0.0025
-getgenv().MaxPred = 0.195
-getgenv().MinPred = 0.130
+getgenv().MaxPred = 0.13021749999999999
+getgenv().MinPred = 0.13021749999999999
 
 -- Для ZeroPredictionMode используются эти минимальные значения
 getgenv().ZeroPredBase = 0.09
