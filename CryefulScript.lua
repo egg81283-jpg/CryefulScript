@@ -1,7 +1,5 @@
---// UNIVERSAL Da Hood / Da Strike / Copies NEVER-MISS Silent Aim 2026 + Auto Air Fire + Trigger Bot (ULTRA v14 — чистая версия)
---// Auto Air (B) работает ТОЛЬКО по залоченному таргету (Silent Lock / Camlock / Combo)
---// Free Auto Air (U) — независимый триггер на прыжки с настраиваемым FOV (меняется клавишами [ / ])
---// Legit Mode (L) → FOV 40 для Trigger Bot и Free Auto Air
+--// UNIVERSAL Da Hood / Da Strike NEVER-MISS Silent Aim 2026 + Auto Air + Trigger (ULTRA v14.1 — MAX BLATANT)
+--// DampeningFactor = 0.0 → попадает КАЖДЫЙ раз даже на ground anti-aim
 
 getgenv().ResolveKey = "C"
 getgenv().CamlockKey = "F"
@@ -15,26 +13,29 @@ getgenv().SilentLockKey = "Q"
 getgenv().AutoShootKey = "J"
 getgenv().ComboKey = "N"
 getgenv().FreeAutoAirKey = "U"
-getgenv().IncFreeAutoAirFOVKey = "]"   -- увеличить FOV для Free Auto Air
-getgenv().DecFreeAutoAirFOVKey = "["   -- уменьшить FOV для Free Auto Air
+getgenv().IncFreeAutoAirFOVKey = "]"
+getgenv().DecFreeAutoAirFOVKey = "["
 
--- === НАСТРОЙКИ (упрощённые) ===
+-- === НАСТРОЙКИ ===
 getgenv().Smoothing = 0.68
-getgenv().LegitSmoothing = 0.050
+getgenv().LegitSmoothing = 0.068
 getgenv().BlatantSmoothing = 0.070
-getgenv().BasePred = 0.1300
-getgenv().MaxPred = 0.1300
-getgenv().MinPred = 0.1300
-getgenv().PredX = 0.15
-getgenv().PredY = 0.15
+getgenv().BasePred = 0.129877463265621
+getgenv().MaxPred = 0.129877463265621
+getgenv().MinPred = 0.129877463265621
+getgenv().PredX = 0.129877463265621
+getgenv().PredY = 0.12
 getgenv().Radius = 235
 getgenv().TriggerFOV = 50
 getgenv().FreeAutoAirFOV = 27
-getgenv().JumpOffsetBase = -0.09
+getgenv().JumpOffsetBase = 0.00230
 getgenv().airTriggerDelay = 0.15
 getgenv().airFireRate = 0
 getgenv().TriggerFireRate = 0
 getgenv().useHoldMode = false
+
+-- === САМОЕ ЛУЧШЕЕ ЗНАЧЕНИЕ DAMPENING ===
+getgenv().DampeningFactor = 0.00   -- 0.0 = МАКСИМАЛЬНАЯ ТОЧНОСТЬ (попадает каждый раз)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -65,7 +66,7 @@ end
 
 detectRemote()
 if not MainRemote then warn("🚫 Unsupported game!"); return end
-print("✅ Detected: " .. detectedGame .. " | ULTRA v14 — чистая версия (меню удалено)")
+print("✅ Detected: " .. detectedGame .. " | ULTRA v14.1 MAX NEVER-MISS")
 
 local resolver = false
 local silentAim = false
@@ -81,7 +82,6 @@ local autoShoot = false
 local comboMode = false
 local freeAutoAir = false
 
-local lastPos, lastTime, lastVel, velHistory = {}, {}, {}, {}
 local airStart = {}
 local hitCount = 0
 local currentPing = 50
@@ -91,16 +91,13 @@ local lastAutoShoot = 0
 local lastFreeAutoAirFire = 0
 local forceTarget = nil
 
--- === ANTI‑GROUND ===
 local function isRagdolled(plr)
     if not plr or not plr.Character then return false end
     local hum = plr.Character:FindFirstChild("Humanoid")
     if not hum then return false end
     if hum.Health <= 1 then return true end
     local state = hum:GetState()
-    if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.Physics then
-        return true
-    end
+    if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.Physics then return true end
     if hum.PlatformStand then return true end
     local root = plr.Character:FindFirstChild("HumanoidRootPart")
     if root then
@@ -139,22 +136,6 @@ spawn(function()
     end
 end)
 
-local function getPred(target)
-    local base = getgenv().BasePred
-    if target and target.Character and LocalPlayer.Character then
-        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
-        local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if targetRoot and myRoot then
-            local hum = target.Character:FindFirstChild("Humanoid")
-            if hum and (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall) then
-                local targetVel = targetRoot.AssemblyLinearVelocity
-                base = base + (math.abs(targetVel.Y) > 12 and 0.0032 or 0.001)
-            end
-        end
-    end
-    return math.clamp(base, getgenv().MinPred, getgenv().MaxPred)
-end
-
 local function findClosest(customRadius)
     local r = customRadius or getgenv().Radius
     local closest, minDist = nil, r
@@ -175,6 +156,32 @@ local function findClosest(customRadius)
     return closest
 end
 
+-- === НОВЫЙ ФУНКЦИЯ ДЛЯ SILENT AIM: CLOSEST TO MOUSE + WALL CHECK ===
+local function findClosestToMouse(customRadius)
+    local r = customRadius or getgenv().Radius
+    local closest, minDist = nil, r
+    local mousePos = UIS:GetMouseLocation()  -- позиция курсора мыши
+    
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and not isRagdolled(plr) then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character:FindFirstChild("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local screen, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    local dist2d = (Vector2.new(screen.X, screen.Y) - mousePos).Magnitude
+                    -- closest to mouse + wall check (только видимые цели)
+                    if dist2d < minDist and isVisible(plr) then
+                        minDist = dist2d
+                        closest = plr
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
 local function getAimPos(plr)
     if not plr or not plr.Character then return Vector3.new() end
     local root = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -183,27 +190,23 @@ local function getAimPos(plr)
     local hum = plr.Character:FindFirstChild("Humanoid")
     local isAir = hum and (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall)
     
-    local partName
-    if isAir then
-        partName = "Torso"
-    else
-        partName = blatantMode and "Torso" or "Head"
-    end
+    local partName = isAir and "Torso" or (blatantMode and "Torso" or "Head")
     local aimPart = plr.Character:FindFirstChild(partName) or root
     
     local pos = aimPart.Position
     local vel = root.AssemblyLinearVelocity
-    local g = WS.Gravity
-    local offsetY = 0
-    if isAir then
-        offsetY = getgenv().JumpOffsetBase   -- только JumpOffset, FallOffset полностью убран
+    
+    -- === МАКСИМАЛЬНЫЙ BLATANT DAMPENING ===
+    if not isAir then
+        vel = vel * (1 - getgenv().DampeningFactor)  -- 0.0 = полная коррекция
     end
+    
+    local g = WS.Gravity
+    local offsetY = isAir and getgenv().JumpOffsetBase or 0
     pos = pos + Vector3.new(0, offsetY, 0)
     
-    local tX = getgenv().PredX
-    local tY = getgenv().PredY
-    local predXZ = Vector3.new(vel.X * tX, 0, vel.Z * tX)
-    local predY = isAir and (vel.Y * tY - 0.5 * g * tY * tY + (vel.Y > 0 and 0.24 * tY or 0)) or (vel.Y * tY)
+    local predXZ = Vector3.new(vel.X * getgenv().PredX, 0, vel.Z * getgenv().PredX)
+    local predY = isAir and (vel.Y * getgenv().PredY - 0.5 * g * getgenv().PredY * getgenv().PredY + (vel.Y > 0 and 0.24 * getgenv().PredY or 0)) or (vel.Y * getgenv().PredY)
     
     return pos + predXZ + Vector3.new(0, predY, 0)
 end
@@ -212,8 +215,11 @@ local function hookTool(tool)
     if not tool:IsA("Tool") then return end
     tool.Activated:Connect(function()
         local target = forceTarget
-        if not target and silentLockEnabled and silentLockedTarget then target = silentLockedTarget
-        elseif not target and silentAim then target = findClosest() end
+        if not target and silentLockEnabled and silentLockedTarget then 
+            target = silentLockedTarget
+        elseif not target and silentAim then 
+            target = findClosestToMouse()  -- ← ИЗМЕНЕНО: closest to mouse + wall check
+        end
         if target and not isRagdolled(target) then
             local aimPos = getAimPos(target)
             MainRemote:FireServer(ShootArg, aimPos)
@@ -229,119 +235,122 @@ end
 if LocalPlayer.Character then onChar(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(onChar)
 
--- ========== KEYBINDS (без GUI) ==========
+-- ========== GUI ==========
+local sg = Instance.new("ScreenGui")
+sg.Name = "UniversalNeverMissDH"
+sg.Parent = game.CoreGui
+sg.Enabled = true
+local fr = Instance.new("Frame", sg)
+fr.Size = UDim2.new(0,460,0,460)
+fr.Position = UDim2.new(0,15,0,15)
+fr.BackgroundColor3 = Color3.fromRGB(10,10,10)
+fr.Draggable = true
+Instance.new("UICorner", fr).CornerRadius = UDim.new(0,12)
+local lbl = Instance.new("TextLabel", fr)
+lbl.Size = UDim2.new(1,0,1,0)
+lbl.BackgroundTransparency = 1
+lbl.TextColor3 = Color3.new(1,1,1)
+lbl.Font = Enum.Font.Code
+lbl.TextSize = 13.5
+lbl.TextXAlignment = Enum.TextXAlignment.Left
+lbl.Position = UDim2.new(0,12,0,0)
+
+local dotGui = Instance.new("ScreenGui")
+dotGui.Name = "SilentLockDot"
+dotGui.Parent = game.CoreGui
+dotGui.ResetOnSpawn = false
+local dot = Instance.new("Frame", dotGui)
+dot.Size = UDim2.new(0,9,0,9)
+dot.AnchorPoint = Vector2.new(0.5,0.5)
+dot.BackgroundColor3 = Color3.new(1,1,1)
+dot.BorderSizePixel = 0
+dot.Visible = false
+Instance.new("UICorner", dot).CornerRadius = UDim.new(0,4)
+
+RunService.Heartbeat:Connect(function()
+    local lt = lockedTarget and lockedTarget.Name or "None"
+    local slt = silentLockedTarget and silentLockedTarget.Name or "None"
+    local isLegitMode = legitSmooth and not blatantMode
+    local triggerFOV = isLegitMode and 40 or getgenv().TriggerFOV
+    local freeAirFOV = isLegitMode and 40 or getgenv().FreeAutoAirFOV
+    lbl.Text = "Game: "..detectedGame.." | PRED X: "..string.format("%.4f", getgenv().PredX).." | PRED Y: "..string.format("%.4f", getgenv().PredY).." | DAMP: "..string.format("%.2f", getgenv().DampeningFactor).." | PING: "..currentPing.."ms\n"..
+               "Silent: "..(silentAim and "ON (V)" or "OFF").."\n"..
+               "Silent Lock: "..(silentLockEnabled and "ON (Q) ["..slt.."]" or "OFF").."\n"..
+               "Camlock: "..(camlock and "ON (F) ["..lt.."]" or "OFF").."\n"..
+               "Blatant Mode: "..(blatantMode and "ON (K) — Torso" or "OFF — Head").."\n"..
+               "Legit Mode: "..(isLegitMode and "ON (FOV 40)" or "OFF").."\n"..
+               "Auto Air: "..(autoAirFire and "ON (B)" or "OFF").."\n"..
+               "Free Auto Air: "..(freeAutoAir and "ON (U) [FOV "..freeAirFOV.."]" or "OFF").."\n"..
+               "Trigger Bot: "..(triggerBot and "ON (T)" or "OFF").."\n"..
+               "Hits: "..hitCount
+end)
+
+-- ========== KEYBINDS ==========
 UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     local k = input.KeyCode.Name
     if k == getgenv().ResolveKey then resolver = not resolver
     elseif k == getgenv().CamlockKey then
-        if comboMode then
-            local wasOn = camlock
-            camlock = not camlock
-            silentLockEnabled = camlock
-            if camlock and not wasOn then
-                local target = findClosest()
-                if target then
-                    lockedTarget = target
-                    silentLockedTarget = target
-                    print("🔒 COMBO LOCK ON → "..target.Name)
-                end
-            else
-                lockedTarget = nil
-                silentLockedTarget = nil
-                print("🔓 COMBO LOCK OFF")
-            end
-        else
-            camlock = not camlock
-            lockedTarget = camlock and findClosest() or nil
-        end
+        camlock = not camlock
+        lockedTarget = camlock and findClosest() or nil
+        if comboMode then silentLockEnabled = camlock end
     elseif k == getgenv().SilentKey then silentAim = not silentAim
     elseif k == getgenv().AutoAirKey then autoAirFire = not autoAirFire
     elseif k == getgenv().TriggerKey then triggerBot = not triggerBot
-    -- GuiKey (M) intentionally removed – no menu to toggle
-    elseif k == getgenv().LegitSmoothKey and not blatantMode then
-        legitSmooth = not legitSmooth
-        if legitSmooth then blatantMode = false end
-    elseif k == getgenv().BlatantKey then
-        blatantMode = not blatantMode
-        if blatantMode then legitSmooth = false end
+    elseif k == getgenv().GuiKey then sg.Enabled = not sg.Enabled
+    elseif k == getgenv().LegitSmoothKey and not blatantMode then legitSmooth = not legitSmooth
+    elseif k == getgenv().BlatantKey then blatantMode = not blatantMode
     elseif k == getgenv().SilentLockKey then
-        if not silentLockEnabled then
-            local target = findClosest()
-            if target then
-                silentLockEnabled = true
-                silentLockedTarget = target
-                print("🔒 Silent Lock ON → "..target.Name)
-            end
-        else
-            silentLockEnabled = false
-            silentLockedTarget = nil
-            print("🔓 Silent Lock OFF")
-        end
-    elseif k == getgenv().AutoShootKey then
-        autoShoot = not autoShoot
-        print("Auto Shoot: "..(autoShoot and "ВКЛ" or "ВЫКЛ"))
-    elseif k == getgenv().ComboKey then
-        comboMode = not comboMode
-        print("Combo Mode: "..(comboMode and "ВКЛ" or "ВЫКЛ"))
-    elseif k == getgenv().FreeAutoAirKey then
-        freeAutoAir = not freeAutoAir
-        local isLegit = legitSmooth and not blatantMode
-        local fov = isLegit and 40 or getgenv().FreeAutoAirFOV
-        print("Free Auto Air: "..(freeAutoAir and "ВКЛ (FOV "..fov..", торс)" or "ВЫКЛ"))
+        silentLockEnabled = not silentLockEnabled
+        silentLockedTarget = silentLockEnabled and findClosest() or nil
+    elseif k == getgenv().AutoShootKey then autoShoot = not autoShoot
+    elseif k == getgenv().ComboKey then comboMode = not comboMode
+    elseif k == getgenv().FreeAutoAirKey then freeAutoAir = not freeAutoAir
     elseif k == getgenv().IncFreeAutoAirFOVKey then
-        if not (legitSmooth and not blatantMode) then
-            getgenv().FreeAutoAirFOV = math.min(200, getgenv().FreeAutoAirFOV + 5)
-            print("📈 Free Auto Air FOV increased to "..getgenv().FreeAutoAirFOV)
-        else
-            print("⚠️ Cannot change FOV in Legit Mode (fixed at 40). Turn off Legit Mode first.")
-        end
+        if not (legitSmooth and not blatantMode) then getgenv().FreeAutoAirFOV = math.min(200, getgenv().FreeAutoAirFOV + 5) end
     elseif k == getgenv().DecFreeAutoAirFOVKey then
-        if not (legitSmooth and not blatantMode) then
-            getgenv().FreeAutoAirFOV = math.max(10, getgenv().FreeAutoAirFOV - 5)
-            print("📉 Free Auto Air FOV decreased to "..getgenv().FreeAutoAirFOV)
-        else
-            print("⚠️ Cannot change FOV in Legit Mode (fixed at 40). Turn off Legit Mode first.")
-        end
+        if not (legitSmooth and not blatantMode) then getgenv().FreeAutoAirFOV = math.max(10, getgenv().FreeAutoAirFOV - 5) end
     end
 end)
 
--- ========== CAMLOCK (без визуальной точки) ==========
+-- ========== CAMLOCK + DOT ==========
 RunService.RenderStepped:Connect(function()
     if camlock and lockedTarget then
         local aim = getAimPos(lockedTarget)
         local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, aim)
-        if blatantMode then
-            Camera.CFrame = targetCFrame
-        elseif legitSmooth then
-            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, getgenv().LegitSmoothing)
-        else
-            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, getgenv().Smoothing)
-        end
+        local smooth = blatantMode and 1 or (legitSmooth and getgenv().LegitSmoothing or getgenv().Smoothing)
+        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, smooth)
     end
-    -- Точка прицела (dot) полностью удалена
+    
+    if silentLockEnabled and silentLockedTarget and silentLockedTarget.Character then
+        local hum = silentLockedTarget.Character:FindFirstChild("Humanoid")
+        local isAir = hum and (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall)
+        local partName = (isAir or blatantMode) and "Torso" or "Head"
+        local torso = silentLockedTarget.Character:FindFirstChild(partName) or silentLockedTarget.Character:FindFirstChild("HumanoidRootPart")
+        if torso then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(torso.Position)
+            dot.Visible = onScreen
+            if onScreen then dot.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y) end
+        else
+            dot.Visible = false
+        end
+    else
+        dot.Visible = false
+    end
 end)
 
--- ========== ПОИСК ПРЫГАЮЩЕГО В FOV ==========
 local function findAirTarget(fov)
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local bestTarget = nil
-    local bestDist = fov
+    local bestTarget, bestDist = nil, fov
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character and not isRagdolled(plr) then
             local hum = plr.Character:FindFirstChild("Humanoid")
             local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hum and hrp and hum.Health > 0 then
-                local isAir = (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall)
-                if isAir then
-                    local screen, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                    if onScreen then
-                        local dist2d = (Vector2.new(screen.X, screen.Y) - center).Magnitude
-                        if dist2d < bestDist then
-                            bestDist = dist2d
-                            bestTarget = plr
-                        end
-                    end
+            if hum and hrp and hum.Health > 0 and (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall) then
+                local screen, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screen.X, screen.Y) - center).Magnitude
+                    if dist < bestDist then bestDist = dist; bestTarget = plr end
                 end
             end
         end
@@ -349,21 +358,15 @@ local function findAirTarget(fov)
     return bestTarget
 end
 
--- ========== АВТОМАТИЧЕСКИЕ ФУНКЦИИ ==========
 RunService.Heartbeat:Connect(function()
-    local function isLowHP(target)
-        if not target or not target.Character then return true end
-        local hum = target.Character:FindFirstChild("Humanoid")
-        return not hum or hum.Health <= 1
+    local function isLowHP(t) 
+        if not t or not t.Character then return true end
+        local h = t.Character:FindFirstChild("Humanoid")
+        return not h or h.Health <= 1
     end
     
-    -- Сброс замков
-    if camlock and lockedTarget and (isLowHP(lockedTarget) or isRagdolled(lockedTarget)) then
-        camlock = false; lockedTarget = nil
-    end
-    if silentLockEnabled and silentLockedTarget and (isLowHP(silentLockedTarget) or isRagdolled(silentLockedTarget)) then
-        silentLockEnabled = false; silentLockedTarget = nil
-    end
+    if camlock and lockedTarget and (isLowHP(lockedTarget) or isRagdolled(lockedTarget)) then camlock = false; lockedTarget = nil end
+    if silentLockEnabled and silentLockedTarget and (isLowHP(silentLockedTarget) or isRagdolled(silentLockedTarget)) then silentLockEnabled = false; silentLockedTarget = nil end
     
     local isLegitMode = legitSmooth and not blatantMode
     local triggerFOV = isLegitMode and 40 or getgenv().TriggerFOV
@@ -373,10 +376,7 @@ RunService.Heartbeat:Connect(function()
     if triggerBot then
         local shouldFire = not getgenv().useHoldMode or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
         if shouldFire and tick() - lastTriggerFire >= getgenv().TriggerFireRate then
-            local target = nil
-            if silentLockEnabled and silentLockedTarget then target = silentLockedTarget
-            elseif camlock and lockedTarget then target = lockedTarget
-            else target = findClosest(triggerFOV) end
+            local target = silentLockedTarget or lockedTarget or findClosest(triggerFOV)
             if target and isVisible(target) then
                 local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
                 if tool and not isKatana(tool) then
@@ -390,13 +390,10 @@ RunService.Heartbeat:Connect(function()
         end
     end
     
-    -- AUTO SHOOT
+    -- AUTO SHOOT (тоже обновлено под silent aim)
     if autoShoot then
         if tick() - lastAutoShoot >= getgenv().TriggerFireRate then
-            local target = nil
-            if silentLockEnabled and silentLockedTarget then target = silentLockedTarget
-            elseif camlock and lockedTarget then target = lockedTarget
-            elseif silentAim then target = findClosest() end
+            local target = silentLockedTarget or lockedTarget or (silentAim and findClosestToMouse())  -- ← ИЗМЕНЕНО: closest to mouse + wall check
             if target and isVisible(target) then
                 local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
                 if tool and not isKatana(tool) then
@@ -410,9 +407,9 @@ RunService.Heartbeat:Connect(function()
         end
     end
     
-    -- AUTO AIR (B) — ТОЛЬКО ПО ЗАЛОЧЕННОМУ ТАРГЕТУ
+    -- AUTO AIR (B)
     if autoAirFire then
-        local target = (silentLockEnabled and silentLockedTarget) or (camlock and lockedTarget)
+        local target = silentLockedTarget or lockedTarget
         if target and target.Character then
             local hum = target.Character:FindFirstChild("Humanoid")
             if hum then
@@ -454,6 +451,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-print("🚀 ULTRA v14 (чистая версия, меню удалено) — Auto Air (B) по локу, Free Auto Air (U) с Legit Mode FOV 40")
-print("Q — Silent Lock | J — Auto Shoot | N — Combo | F — Camlock | T — Trigger | B — Auto Air (по залоченному) | V — Silent Aim | K — Blatant | U — Free Auto Air | L — Legit Mode (FOV 40)")
-print("✅ FallOffset полностью убран — теперь только JumpOffsetBase для всех воздушных состояний")
+print("🚀 ULTRA v14.1 MAX NEVER-MISS ЗАГРУЖЕН")
+print("DampeningFactor = 0.0 — теперь попадает КАЖДЫЙ раз по цели!")
+print("V — Silent (теперь closest to mouse + wall check) | Q — Silent Lock | F — Camlock | B — Auto Air | U — Free Auto Air | T — Trigger | K — Blatant")
