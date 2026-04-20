@@ -1,8 +1,8 @@
 --// UNIVERSAL Da Hood / Da Strike NEVER-MISS Silent Aim 2026 + Auto Air + Trigger (ULTRA v14.1 — MAX BLATANT)
 --// DampeningFactor = 0.0 → попадает КАЖДЫЙ раз даже на ground anti-aim
 
-getgenv().ResolveKey = "C"
-getgenv().CamlockKey = "F"
+getgenv().ResolveKey = "N"
+getgenv().CamlockKey = "C"
 getgenv().SilentKey = "V"
 getgenv().AutoAirKey = "B"
 getgenv().TriggerKey = "T"
